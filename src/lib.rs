@@ -70,7 +70,7 @@ use core::fmt;
 use url::{Host, Url};
 
 use hmac::Mac;
-use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
+use chrono::prelude::*;
 
 type HmacSha1 = hmac::Hmac<sha1::Sha1>;
 type HmacSha256 = hmac::Hmac<sha2::Sha256>;
@@ -129,9 +129,9 @@ impl Algorithm {
     }
 }
 
-fn system_time() -> Result<u64, SystemTimeError> {
-    let t = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    Ok(t)
+fn system_time() -> Result<u64, std::num::TryFromIntError> {
+    let dt = Local::now().timestamp();
+    TryInto::<u64>::try_into(dt)
 }
 
 /// TOTP holds informations as to how to generate an auth code and validate it. Its [secret](struct.TOTP.html#structfield.secret) field is sensitive data, treat it accordingly
@@ -429,19 +429,19 @@ impl TOTP {
 
     /// Returns the timestamp of the first second of the next step
     /// According to system time
-    pub fn next_step_current(&self) -> Result<u64, SystemTimeError> {
+    pub fn next_step_current(&self) -> Result<u64, std::num::TryFromIntError> {
         let t = system_time()?;
         Ok(self.next_step(t))
     }
 
     /// Give the ttl (in seconds) of the current token
-    pub fn ttl(&self) -> Result<u64, SystemTimeError> {
+    pub fn ttl(&self) -> Result<u64, std::num::TryFromIntError> {
         let t = system_time()?;
         Ok(self.step - (t % self.step))
     }
 
     /// Generate a token from the current system time
-    pub fn generate_current(&self) -> Result<String, SystemTimeError> {
+    pub fn generate_current(&self) -> Result<String, std::num::TryFromIntError> {
         let t = system_time()?;
         Ok(self.generate(t))
     }
@@ -460,7 +460,7 @@ impl TOTP {
     }
 
     /// Will check if token is valid by current system time, accounting [skew](struct.TOTP.html#structfield.skew)
-    pub fn check_current(&self, token: &str) -> Result<bool, SystemTimeError> {
+    pub fn check_current(&self, token: &str) -> Result<bool, std::num::TryFromIntError> {
         let t = system_time()?;
         Ok(self.check(token, t))
     }
@@ -937,10 +937,7 @@ mod tests {
     #[cfg(not(feature = "otpauth"))]
     fn generate_token_current() {
         let totp = TOTP::new(Algorithm::SHA1, 6, 1, 1, "TestSecretSuperSecret".into()).unwrap();
-        let time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let time = TryInto::<u64>::try_into(Local::now().timestamp()).unwrap();
         assert_eq!(
             totp.generate(time).as_str(),
             totp.generate_current().unwrap()
